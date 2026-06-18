@@ -6,7 +6,7 @@ from pdf_extractor import extract_raw_text, get_base64_pdf, extract_links, trim_
 # NOTE: PDF text extraction is now handled by pdf_extractor.py
 # which uses lightweight pypdf for Groq text, and base64 encoding for Gemini native PDF ingestion.
 
-def analyze_atr(pdf_path, api_key="", provider="gemini"):
+def analyze_atr(pdf_path, api_key="", provider="gemini", model_name="gemini-flash-latest"):
     """
     Main function to analyze a single ATR PDF using Gemini or Groq API.
     Returns error if API fails.
@@ -123,13 +123,13 @@ def analyze_atr(pdf_path, api_key="", provider="gemini"):
             url = "https://api.groq.com/openai/v1/chat/completions"
             headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
             payload = {
-                "model": "llama-3.3-70b-versatile",
+                "model": model_name,
                 "messages": [{"role": "user", "content": prompt_with_text}],
                 "response_format": {"type": "json_object"},
                 "temperature": 0.1
             }
         else:
-            model = "gemini-1.5-flash"
+            model = model_name
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
             headers = {"Content-Type": "application/json"}
             payload = {
@@ -197,7 +197,7 @@ def analyze_atr(pdf_path, api_key="", provider="gemini"):
             
     return result
 
-def analyze_vigilance(pdf_path, api_key="", provider="gemini"):
+def analyze_vigilance(pdf_path, api_key="", provider="gemini", model_name="gemini-flash-latest"):
     """
     Analyzes a single ATR PDF to determine if a vigilance angle is present.
     """
@@ -253,13 +253,13 @@ def analyze_vigilance(pdf_path, api_key="", provider="gemini"):
             url = "https://api.groq.com/openai/v1/chat/completions"
             headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
             payload = {
-                "model": "llama-3.3-70b-versatile",
+                "model": model_name,
                 "messages": [{"role": "user", "content": prompt_with_text}],
                 "response_format": {"type": "json_object"},
                 "temperature": 0.1
             }
         else:
-            model = "gemini-1.5-flash"
+            model = model_name
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
             headers = {"Content-Type": "application/json"}
             payload = {
@@ -314,7 +314,7 @@ def analyze_vigilance(pdf_path, api_key="", provider="gemini"):
             
     return result
 
-def analyze_darpg_routing(pdf_path, api_key="", provider="gemini"):
+def analyze_darpg_routing(pdf_path, api_key="", provider="gemini", model_name="gemini-flash-latest"):
     """
     Analyzes a single ATR PDF to resolve grievance pendency for DARPG, determine routing
     (Dispose vs Transfer), draft ATR remarks, and detect ping-pongs and negligence.
@@ -381,13 +381,13 @@ def analyze_darpg_routing(pdf_path, api_key="", provider="gemini"):
             url = "https://api.groq.com/openai/v1/chat/completions"
             headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
             payload = {
-                "model": "llama-3.3-70b-versatile",
+                "model": model_name,
                 "messages": [{"role": "user", "content": prompt_with_text}],
                 "response_format": {"type": "json_object"},
                 "temperature": 0.1
             }
         else:
-            model = "gemini-1.5-flash"
+            model = model_name
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
             headers = {"Content-Type": "application/json"}
             payload = {
