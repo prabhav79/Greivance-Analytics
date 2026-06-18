@@ -8,34 +8,26 @@ from docling_parser import extract_structured_text, extract_links, trim_to_token
 # This significantly reduces Gemini token consumption (~50-60% fewer chars)
 # and improves field extraction accuracy by preserving section headers and tables.
 
-def analyze_atr(pdf_path, api_key=""):
+def analyze_atr(pdf_path, api_key="", provider="gemini"):
     """
-    Main function to analyze a single ATR PDF using Gemini API via requests.
-    Returns error if API fails (no heuristic fallback).
+    Main function to analyze a single ATR PDF using Gemini or Groq API.
+    Returns error if API fails.
     """
     
     # 1. Prepare Inputs
-    # extract_structured_text uses docling (with disk cache) for layout-aware
-    # Markdown. Falls back to pypdf transparently if docling fails.
     text_content = extract_structured_text(pdf_path)
     links = extract_links(pdf_path)
     
     if not text_content:
         return {"status": "error", "error": "No text extracted from PDF"}
 
-    # Trim to token budget. 12k chars of structured Markdown ≈ what 30k chars
-    # of raw pypdf noise used to hold — but much cleaner for the model to read.
     text_content = trim_to_token_budget(text_content, max_chars=12000)
 
-    # 2. Try Gemini Analysis
+    # 2. Try Analysis
     try:
         if not api_key:
             raise ValueError("API Key is missing")
 
-        # Use gemini-flash-latest as verified
-        model = "gemini-flash-latest"
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-        
         prompt = f"""
         You are a Government Grievance Analyst. The document below is a CPGRAMS ATR (Action Taken Report)
         exported as structured Markdown. Section headers (e.g. ## Grievance Description,
@@ -128,34 +120,45 @@ def analyze_atr(pdf_path, api_key=""):
         }}
         """
         
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }],
-            "generationConfig": {
-                "response_mime_type": "application/json"
+        if provider == "groq":
+            url = "https://api.groq.com/openai/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            payload = {
+                "model": "llama3-70b-8192",
+                "messages": [{"role": "user", "content": prompt}],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.1
             }
-        }
+        else:
+            model = "gemini-flash-latest"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            headers = {"Content-Type": "application/json"}
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"response_mime_type": "application/json"}
+            }
         
-        # 120s timeout (Increased as requested)
         import time
         max_retries = 3
         for attempt in range(max_retries):
-            response = requests.post(url, json=payload, timeout=120)
+            response = requests.post(url, json=payload, headers=headers, timeout=120)
             if response.status_code in [503, 429]:
                 if attempt < max_retries - 1:
-                    time.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s, 4s...
+                    time.sleep(2 ** attempt)
                     continue
             break
             
         if response.status_code != 200:
-            print(f"Gemini API Error {response.status_code}: {response.text}")
+            print(f"API Error {response.status_code}: {response.text}")
             return {"status": "error", "error": f"API Error {response.status_code}"}
         else:
             data = response.json()
             try:
-                content = data['candidates'][0]['content']['parts'][0]['text']
-                # Cleanup if model still adds markdown despite mime_type
+                if provider == "groq":
+                    content = data['choices'][0]['message']['content']
+                else:
+                    content = data['candidates'][0]['content']['parts'][0]['text']
+                    
                 if "```json" in content: content = content.replace("```json", "").replace("```", "")
                 elif "```" in content: content = content.replace("```", "")
                 
@@ -192,9 +195,9 @@ def analyze_atr(pdf_path, api_key=""):
             
     return result
 
-def analyze_vigilance(pdf_path, api_key=""):
+def analyze_vigilance(pdf_path, api_key="", provider="gemini"):
     """
-    Analyzes a single ATR PDF using Gemini API to determine if a vigilance angle is present.
+    Analyzes a single ATR PDF to determine if a vigilance angle is present.
     """
     
     text_content = extract_structured_text(pdf_path)
@@ -208,9 +211,6 @@ def analyze_vigilance(pdf_path, api_key=""):
         if not api_key:
             raise ValueError("API Key is missing")
 
-        model = "gemini-flash-latest"
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-        
         prompt = f"""
         You are a Government Grievance Analyst. The document below is a CPGRAMS ATR (Action Taken Report)
         exported as structured Markdown. Based on Central Vigilance Commission (CVC) guidelines,
@@ -244,19 +244,28 @@ def analyze_vigilance(pdf_path, api_key=""):
         }}
         """
         
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }],
-            "generationConfig": {
-                "response_mime_type": "application/json"
+        if provider == "groq":
+            url = "https://api.groq.com/openai/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            payload = {
+                "model": "llama3-70b-8192",
+                "messages": [{"role": "user", "content": prompt}],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.1
             }
-        }
+        else:
+            model = "gemini-flash-latest"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            headers = {"Content-Type": "application/json"}
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"response_mime_type": "application/json"}
+            }
         
         import time
         max_retries = 3
         for attempt in range(max_retries):
-            response = requests.post(url, json=payload, timeout=120)
+            response = requests.post(url, json=payload, headers=headers, timeout=120)
             if response.status_code in [503, 429]:
                 if attempt < max_retries - 1:
                     time.sleep(2 ** attempt)
@@ -268,7 +277,11 @@ def analyze_vigilance(pdf_path, api_key=""):
         else:
             data = response.json()
             try:
-                content = data['candidates'][0]['content']['parts'][0]['text']
+                if provider == "groq":
+                    content = data['choices'][0]['message']['content']
+                else:
+                    content = data['candidates'][0]['content']['parts'][0]['text']
+                    
                 if "```json" in content: content = content.replace("```json", "").replace("```", "")
                 elif "```" in content: content = content.replace("```", "")
                 
@@ -292,7 +305,7 @@ def analyze_vigilance(pdf_path, api_key=""):
             
     return result
 
-def analyze_darpg_routing(pdf_path, api_key=""):
+def analyze_darpg_routing(pdf_path, api_key="", provider="gemini"):
     """
     Analyzes a single ATR PDF to resolve grievance pendency for DARPG, determine routing
     (Dispose vs Transfer), draft ATR remarks, and detect ping-pongs and negligence.
@@ -308,9 +321,6 @@ def analyze_darpg_routing(pdf_path, api_key=""):
         if not api_key:
             raise ValueError("API Key is missing")
 
-        model = "gemini-flash-latest"
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
-        
         prompt = f"""
         You are a highly skilled Government Grievance Analyst for DARPG (Department of Administrative Reforms and Public Grievances). 
         The document below is a CPGRAMS ATR (Action Taken Report) exported as structured Markdown.
@@ -355,19 +365,28 @@ def analyze_darpg_routing(pdf_path, api_key=""):
         }}
         """
         
-        payload = {
-            "contents": [{
-                "parts": [{"text": prompt}]
-            }],
-            "generationConfig": {
-                "response_mime_type": "application/json"
+        if provider == "groq":
+            url = "https://api.groq.com/openai/v1/chat/completions"
+            headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+            payload = {
+                "model": "llama3-70b-8192",
+                "messages": [{"role": "user", "content": prompt}],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.1
             }
-        }
+        else:
+            model = "gemini-flash-latest"
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
+            headers = {"Content-Type": "application/json"}
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {"response_mime_type": "application/json"}
+            }
         
         import time
         max_retries = 3
         for attempt in range(max_retries):
-            response = requests.post(url, json=payload, timeout=120)
+            response = requests.post(url, json=payload, headers=headers, timeout=120)
             if response.status_code in [503, 429]:
                 if attempt < max_retries - 1:
                     time.sleep(2 ** attempt)
@@ -379,7 +398,11 @@ def analyze_darpg_routing(pdf_path, api_key=""):
         else:
             data = response.json()
             try:
-                content = data['candidates'][0]['content']['parts'][0]['text']
+                if provider == "groq":
+                    content = data['choices'][0]['message']['content']
+                else:
+                    content = data['candidates'][0]['content']['parts'][0]['text']
+                    
                 if "```json" in content: content = content.replace("```json", "").replace("```", "")
                 elif "```" in content: content = content.replace("```", "")
                 

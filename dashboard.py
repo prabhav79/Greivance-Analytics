@@ -28,18 +28,25 @@ with st.sidebar:
     st.header("🤖 Local Intelligence")
     
     app_mode = st.radio("Analysis Mode", ["General Intelligence", "Vigilance Angle Identification", "DARPG Pendency Resolution"])
+    ai_provider = st.selectbox("AI Provider", ["Google Gemini", "Groq (Llama 3)"])
     
-    # API Key Input (Masked by default in production, but here plain text for ease or password type)
-    api_key = st.text_input("Gemini API Key", value=os.environ.get("GEMINI_API_KEY", ""), type="password", help="Enter your personal Gemini API Key")
+    # API Key Input
+    provider_name = "Gemini" if ai_provider == "Google Gemini" else "Groq"
+    api_key = st.text_input(f"{provider_name} API Key", value=os.environ.get(f"{provider_name.upper()}_API_KEY", ""), type="password", help=f"Enter your personal {provider_name} API Key")
     uploaded_files = st.file_uploader("Upload ATR PDFs", type=["pdf"], accept_multiple_files=True)
     
     if st.button("📡 Test Connection"):
         try:
-            # Verify API Key by listing models
-            url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
-            resp = requests.get(url, timeout=5)
+            if ai_provider == "Google Gemini":
+                url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+                resp = requests.get(url, timeout=5)
+            else:
+                url = "https://api.groq.com/openai/v1/models"
+                headers = {"Authorization": f"Bearer {api_key}"}
+                resp = requests.get(url, headers=headers, timeout=5)
+                
             if resp.status_code == 200:
-                st.success(f"Connected! Gemini API Valid.")
+                st.success(f"Connected! {provider_name} API Valid.")
             else:
                 st.error(f"Error {resp.status_code}: {resp.text}")
         except Exception as e:
@@ -79,20 +86,22 @@ with st.sidebar:
                     status_text.text(f"Processing: {filename}")
                     
                     # Run Analysis depending on mode
+                    prov_key = "gemini" if ai_provider == "Google Gemini" else "groq"
+                    
                     if app_mode == "General Intelligence":
-                        result = analyzer.analyze_atr(filepath, api_key=api_key)
+                        result = analyzer.analyze_atr(filepath, api_key=api_key, provider=prov_key)
                         if result.get("status") == "error":
                             st.error(f"Error processing {filename}: {result.get('error')}")
                             continue
                         database.save_result(filename, result)
                     elif app_mode == "Vigilance Angle Identification":
-                        result = analyzer.analyze_vigilance(filepath, api_key=api_key)
+                        result = analyzer.analyze_vigilance(filepath, api_key=api_key, provider=prov_key)
                         if result.get("status") == "error":
                             st.error(f"Error processing {filename}: {result.get('error')}")
                             continue
                         database.save_vigilance_result(filename, result)
                     else:
-                        result = analyzer.analyze_darpg_routing(filepath, api_key=api_key)
+                        result = analyzer.analyze_darpg_routing(filepath, api_key=api_key, provider=prov_key)
                         if result.get("status") == "error":
                             st.error(f"Error processing {filename}: {result.get('error')}")
                             continue
