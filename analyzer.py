@@ -138,8 +138,16 @@ def analyze_atr(pdf_path, api_key=""):
         }
         
         # 120s timeout (Increased as requested)
-        response = requests.post(url, json=payload, timeout=120)
-        
+        import time
+        max_retries = 3
+        for attempt in range(max_retries):
+            response = requests.post(url, json=payload, timeout=120)
+            if response.status_code in [503, 429]:
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff: 1s, 2s, 4s...
+                    continue
+            break
+            
         if response.status_code != 200:
             print(f"Gemini API Error {response.status_code}: {response.text}")
             return {"status": "error", "error": f"API Error {response.status_code}"}
@@ -245,8 +253,16 @@ def analyze_vigilance(pdf_path, api_key=""):
             }
         }
         
-        response = requests.post(url, json=payload, timeout=120)
-        
+        import time
+        max_retries = 3
+        for attempt in range(max_retries):
+            response = requests.post(url, json=payload, timeout=120)
+            if response.status_code in [503, 429]:
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)
+                    continue
+            break
+            
         if response.status_code != 200:
             return {"status": "error", "error": f"API Error {response.status_code}"}
         else:
@@ -348,8 +364,16 @@ def analyze_darpg_routing(pdf_path, api_key=""):
             }
         }
         
-        response = requests.post(url, json=payload, timeout=120)
-        
+        import time
+        max_retries = 3
+        for attempt in range(max_retries):
+            response = requests.post(url, json=payload, timeout=120)
+            if response.status_code in [503, 429]:
+                if attempt < max_retries - 1:
+                    time.sleep(2 ** attempt)
+                    continue
+            break
+            
         if response.status_code != 200:
             return {"status": "error", "error": f"API Error {response.status_code}"}
         else:
