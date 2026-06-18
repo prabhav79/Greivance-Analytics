@@ -30,12 +30,7 @@ with st.sidebar:
     app_mode = st.radio("Analysis Mode", ["General Intelligence", "Vigilance Angle Identification", "DARPG Pendency Resolution"])
     ai_provider = st.selectbox("AI Provider", ["Google Gemini", "Groq (Llama 3)"])
     
-    # Model Selection
-    if ai_provider == "Google Gemini":
-        model_name = st.selectbox("Model Name", ["gemini-flash-latest", "gemini-1.5-flash-latest", "gemini-1.5-pro-latest"], index=0)
-    else:
-        model_name = st.selectbox("Model Name", ["llama-3.3-70b-versatile", "llama3-70b-8192", "mixtral-8x7b-32768"], index=0)
-        
+
     # API Key Input
     provider_name = "Gemini" if ai_provider == "Google Gemini" else "Groq"
     api_key = st.text_input(f"{provider_name} API Key", value=os.environ.get(f"{provider_name.upper()}_API_KEY", ""), type="password", help=f"Enter your personal {provider_name} API Key")
@@ -44,7 +39,7 @@ with st.sidebar:
     if st.button("📡 Test Connection"):
         try:
             if ai_provider == "Google Gemini":
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}?key={api_key}"
+                url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
                 resp = requests.get(url, timeout=5)
             else:
                 url = "https://api.groq.com/openai/v1/models"
@@ -96,19 +91,19 @@ with st.sidebar:
                     prov_key = "gemini" if ai_provider == "Google Gemini" else "groq"
                     
                     if app_mode == "General Intelligence":
-                        result = analyzer.analyze_atr(filepath, api_key=api_key, provider=prov_key, model_name=model_name)
+                        result = analyzer.analyze_atr(filepath, api_key=api_key, provider=prov_key)
                         if result.get("status") == "error":
                             st.error(f"Error processing {filename}: {result.get('error')}")
                             continue
                         database.save_result(filename, result)
                     elif app_mode == "Vigilance Angle Identification":
-                        result = analyzer.analyze_vigilance(filepath, api_key=api_key, provider=prov_key, model_name=model_name)
+                        result = analyzer.analyze_vigilance(filepath, api_key=api_key, provider=prov_key)
                         if result.get("status") == "error":
                             st.error(f"Error processing {filename}: {result.get('error')}")
                             continue
                         database.save_vigilance_result(filename, result)
                     else:
-                        result = analyzer.analyze_darpg_routing(filepath, api_key=api_key, provider=prov_key, model_name=model_name)
+                        result = analyzer.analyze_darpg_routing(filepath, api_key=api_key, provider=prov_key)
                         if result.get("status") == "error":
                             st.error(f"Error processing {filename}: {result.get('error')}")
                             continue
