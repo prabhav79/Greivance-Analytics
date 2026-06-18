@@ -1,12 +1,10 @@
 import requests
 import json
 import re
-from docling_parser import extract_structured_text, extract_links, trim_to_token_budget
+from pdf_extractor import extract_raw_text, get_base64_pdf, extract_links, trim_to_token_budget
 
-# NOTE: PDF text extraction is now handled by docling_parser.py
-# which uses the docling ML library for layout-aware structured Markdown output.
-# This significantly reduces Gemini token consumption (~50-60% fewer chars)
-# and improves field extraction accuracy by preserving section headers and tables.
+# NOTE: PDF text extraction is now handled by pdf_extractor.py
+# which uses lightweight pypdf for Groq text, and base64 encoding for Gemini native PDF ingestion.
 
 def analyze_atr(pdf_path, api_key="", provider="gemini"):
     """
@@ -15,13 +13,19 @@ def analyze_atr(pdf_path, api_key="", provider="gemini"):
     """
     
     # 1. Prepare Inputs
-    text_content = extract_structured_text(pdf_path)
+    text_content = extract_raw_text(pdf_path)
     links = extract_links(pdf_path)
     
     if not text_content:
         return {"status": "error", "error": "No text extracted from PDF"}
 
-    text_content = trim_to_token_budget(text_content, max_chars=12000)
+    text_content = trim_to_token_budget(text_content, max_chars=30000)
+    
+    base64_pdf = None
+    if provider == "gemini":
+        base64_pdf = get_base64_pdf(pdf_path)
+        if not base64_pdf:
+            return {"status": "error", "error": "PDF read failed"}
 
     # 2. Try Analysis
     try:
@@ -29,13 +33,8 @@ def analyze_atr(pdf_path, api_key="", provider="gemini"):
             raise ValueError("API Key is missing")
 
         prompt = f"""
-        You are a Government Grievance Analyst. The document below is a CPGRAMS ATR (Action Taken Report)
-        exported as structured Markdown. Section headers (e.g. ## Grievance Description,
-        ## Action Taken Report, ## Officer Details) mark distinct parts of the document.
-        Use these sections to locate the relevant information precisely.
-
-        DOCUMENT:
-        {text_content}
+        You are a Government Grievance Analyst. The document below is a CPGRAMS ATR (Action Taken Report).
+        Use its contents to locate the relevant information precisely.
 
         INSTRUCTIONS FOR SUCCESS STORY FORMATTING:
         If the case is a SUCCESS (relief provided, action taken), you MUST format the story as follows:
@@ -48,45 +47,44 @@ def analyze_atr(pdf_path, api_key="", provider="gemini"):
 
         2. 'success_narrative':
            - A SINGLE consolidated narrative paragraph.
-           - Must cover: Grievance background → Failure of regular channels → CPGRAMS intervention → Concrete outcome.
+           - Must cover: Grievance background -> Failure of regular channels -> CPGRAMS intervention -> Concrete outcome.
            - Tone: Factual, concise, administrative.
            - No bullet points. Subtly highlight CPGRAMS as the turning point.
 
         FIELD EXTRACTION RULES:
-        Focus on these document sections for each field:
-        - 'grievance_id'     → Registration number (e.g. DOAAC/E/2024/...) from the document header.
-        - 'grievance_type'   → Classify the document intent as "Grievance", "Suggestion", or "Request".
-        - 'has_attachment'   → true if the document explicitly mentions attached documents or annexures (e.g., "Attached Document : Yes"), false otherwise.
-        - 'citizen_problem'  → From the "Grievance Description" section.
-        - 'resolution_summary' → From the last desk's "Action Taken" or "Remarks" section.
-        - 'is_success_story' → true if fully resolved with tangible action, false otherwise.
-        - 'success_headline' → As per formatting instructions (or null).
-        - 'success_narrative'→ As per formatting instructions (or null).
-        - 'status'           → Always 'analyzed'.
-        - 'desk_count'       → Count distinct desks/offices the grievance passed through.
-        - 'ping_pong_count'  → Count how many times a grievance returned to an already-visited desk.
-        - 'ping_pong_desks'  → List the specific desks involved in ping-pong transfers.
-        - 'bottleneck_desk'  → Office that held the grievance the longest without action.
-        - 'final_resolver'   → Officer name from the last "Officer Details" entry (if stated).
-        - 'resolved_desk'    → Office/desk name that finally resolved it.
-        - 'citizen_feedback' → Verbatim or near-verbatim feedback from the citizen, if present.
-        - 'intelligent_issue_summary'  → Concise, intelligent paraphrase of the citizen's grievance.
-        - 'intelligent_officer_summary'→ Intelligent summary of ONLY the final officer's remarks/action.
-        - 'intelligent_citizen_feedback_summary' → Concise summary of citizen feedback (or null).
+        - 'grievance_id'     -> Registration number (e.g. DOAAC/E/2024/...) from the document header.
+        - 'grievance_type'   -> Classify the document intent as "Grievance", "Suggestion", or "Request".
+        - 'has_attachment'   -> true if the document explicitly mentions attached documents or annexures, false otherwise.
+        - 'citizen_problem'  -> From the Grievance Description section.
+        - 'resolution_summary' -> From the last desk's Action Taken or Remarks section.
+        - 'is_success_story' -> true if fully resolved with tangible action, false otherwise.
+        - 'success_headline' -> As per formatting instructions (or null).
+        - 'success_narrative'-> As per formatting instructions (or null).
+        - 'status'           -> Always 'analyzed'.
+        - 'desk_count'       -> Count distinct desks/offices the grievance passed through.
+        - 'ping_pong_count'  -> Count how many times a grievance returned to an already-visited desk.
+        - 'ping_pong_desks'  -> List the specific desks involved in ping-pong transfers.
+        - 'bottleneck_desk'  -> Office that held the grievance the longest without action.
+        - 'final_resolver'   -> Officer name from the last Officer Details entry (if stated).
+        - 'resolved_desk'    -> Office/desk name that finally resolved it.
+        - 'citizen_feedback' -> Verbatim or near-verbatim feedback from the citizen, if present.
+        - 'intelligent_issue_summary'  -> Concise, intelligent paraphrase of the citizen's grievance.
+        - 'intelligent_officer_summary'-> Intelligent summary of ONLY the final officer's remarks/action.
+        - 'intelligent_citizen_feedback_summary' -> Concise summary of citizen feedback (or null).
 
         EXTRA INSIGHTS FIELDS:
-        - 'citizen_sentiment' → Initial emotion of citizen (e.g., Distressed, Angry, Neutral, Assertive)
-        - 'officer_tone' → Tone of the resolving officer (e.g., Empathetic, Bureaucratic, Dismissive, Helpful)
-        - 'citizen_feedback_sentiment' → Emotion at closure (e.g., Satisfied, Frustrated, Escalating, None)
-        - 'delay_root_cause' → Probable reason for delay/bottleneck (e.g., Missing documents, Jurisdictional dispute, Officer inaction)
-        - 'jurisdiction_accuracy' → Did the citizen initially route it correctly or was delay caused by bad routing?
-        - 'standardized_theme' → Broad category (e.g., Pension Arrears, Financial Fraud, Workplace Harassment, Infrastructure)
-        - 'urgency_score' → Integer 1 to 5 indicating severity/risk (5 = critical emergency/destitution)
-        - 'is_systemic_issue' → Boolean true if this grievance represents a repeated wider policy flaw rather than an isolated error.
-        - 'policy_recommendation' → One-sentence recommendation to fix root cause so this type of grievance doesn't repeat.
+        - 'citizen_sentiment' -> Initial emotion of citizen (e.g., Distressed, Angry, Neutral, Assertive)
+        - 'officer_tone' -> Tone of the resolving officer (e.g., Empathetic, Bureaucratic, Dismissive, Helpful)
+        - 'citizen_feedback_sentiment' -> Emotion at closure (e.g., Satisfied, Frustrated, Escalating, None)
+        - 'delay_root_cause' -> Probable reason for delay/bottleneck (e.g., Missing documents, Jurisdictional dispute, Officer inaction)
+        - 'jurisdiction_accuracy' -> Did the citizen initially route it correctly or was delay caused by bad routing?
+        - 'standardized_theme' -> Broad category (e.g., Pension Arrears, Financial Fraud, Workplace Harassment, Infrastructure)
+        - 'urgency_score' -> Integer 1 to 5 indicating severity/risk (5 = critical emergency/destitution)
+        - 'is_systemic_issue' -> Boolean true if this grievance represents a repeated wider policy flaw rather than an isolated error.
+        - 'policy_recommendation' -> One-sentence recommendation to fix root cause so this type of grievance doesn't repeat.
 
         OUTPUT FORMAT:
-        Return ONLY valid JSON. Do not include markdown code fences.
+        Return ONLY valid JSON.
         {{
             "grievance_id": "...",
             "grievance_type": "Grievance",
@@ -121,20 +119,24 @@ def analyze_atr(pdf_path, api_key="", provider="gemini"):
         """
         
         if provider == "groq":
+            prompt_with_text = prompt + f"\n\nDOCUMENT:\n{text_content}"
             url = "https://api.groq.com/openai/v1/chat/completions"
             headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
             payload = {
                 "model": "llama-3.3-70b-versatile",
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": [{"role": "user", "content": prompt_with_text}],
                 "response_format": {"type": "json_object"},
                 "temperature": 0.1
             }
         else:
-            model = "gemini-flash-latest"
+            model = "gemini-1.5-flash"
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
             headers = {"Content-Type": "application/json"}
             payload = {
-                "contents": [{"parts": [{"text": prompt}]}],
+                "contents": [{"parts": [
+                    {"text": prompt},
+                    {"inline_data": {"mime_type": "application/pdf", "data": base64_pdf}}
+                ]}],
                 "generationConfig": {"response_mime_type": "application/json"}
             }
         
@@ -166,7 +168,6 @@ def analyze_atr(pdf_path, api_key="", provider="gemini"):
                 result = json.loads(content)
             except (KeyError, IndexError, json.JSONDecodeError) as e:
                 print(f"Parsing Error: {e}")
-                print(f"Raw Content: {data}")
                 return {"status": "error", "error": "JSON Parsing Failed"}
 
     except Exception as e:
@@ -201,20 +202,25 @@ def analyze_vigilance(pdf_path, api_key="", provider="gemini"):
     Analyzes a single ATR PDF to determine if a vigilance angle is present.
     """
     
-    text_content = extract_structured_text(pdf_path)
+    text_content = extract_raw_text(pdf_path)
 
     if not text_content:
         return {"status": "error", "error": "No text extracted from PDF"}
 
-    text_content = trim_to_token_budget(text_content, max_chars=12000)
+    text_content = trim_to_token_budget(text_content, max_chars=30000)
+
+    base64_pdf = None
+    if provider == "gemini":
+        base64_pdf = get_base64_pdf(pdf_path)
+        if not base64_pdf:
+            return {"status": "error", "error": "PDF read failed"}
 
     try:
         if not api_key:
             raise ValueError("API Key is missing")
 
         prompt = f"""
-        You are a Government Grievance Analyst. The document below is a CPGRAMS ATR (Action Taken Report)
-        exported as structured Markdown. Based on Central Vigilance Commission (CVC) guidelines,
+        You are a Government Grievance Analyst. Based on Central Vigilance Commission (CVC) guidelines,
         examine the document to determine if a "vigilance angle" is involved.
 
         CVC Guidelines for Vigilance Angle:
@@ -227,17 +233,14 @@ def analyze_vigilance(pdf_path, api_key="", provider="gemini"):
         4. Possesses assets disproportionate to their known sources of income.
         5. Is involved in cases of misappropriation, forgery, or cheating or other similar criminal offences.
 
-        DOCUMENT (structured Markdown — use section headers to locate relevant content):
-        {text_content}
-
-        Assess whether a vigilance angle is involved ONLY based on the text provided.
+        Assess whether a vigilance angle is involved ONLY based on the document provided.
         Return a perfectly formatted JSON with exactly three fields:
         - "grievance_id": The registration number from the document header (e.g. DOAAC/E/...), else null.
         - "is_vigilance": "Yes" if a vigilance angle is clearly present per CVC guidelines, else "No".
         - "vigilance_reasoning": Brief explanation citing which guideline applies (or why none do).
 
         OUTPUT FORMAT:
-        Return ONLY valid JSON. Do not include markdown code fences.
+        Return ONLY valid JSON.
         {{
             "grievance_id": "...",
             "is_vigilance": "Yes",
@@ -246,20 +249,24 @@ def analyze_vigilance(pdf_path, api_key="", provider="gemini"):
         """
         
         if provider == "groq":
+            prompt_with_text = prompt + f"\n\nDOCUMENT:\n{text_content}"
             url = "https://api.groq.com/openai/v1/chat/completions"
             headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
             payload = {
                 "model": "llama-3.3-70b-versatile",
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": [{"role": "user", "content": prompt_with_text}],
                 "response_format": {"type": "json_object"},
                 "temperature": 0.1
             }
         else:
-            model = "gemini-flash-latest"
+            model = "gemini-1.5-flash"
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
             headers = {"Content-Type": "application/json"}
             payload = {
-                "contents": [{"parts": [{"text": prompt}]}],
+                "contents": [{"parts": [
+                    {"text": prompt},
+                    {"inline_data": {"mime_type": "application/pdf", "data": base64_pdf}}
+                ]}],
                 "generationConfig": {"response_mime_type": "application/json"}
             }
         
@@ -312,12 +319,18 @@ def analyze_darpg_routing(pdf_path, api_key="", provider="gemini"):
     Analyzes a single ATR PDF to resolve grievance pendency for DARPG, determine routing
     (Dispose vs Transfer), draft ATR remarks, and detect ping-pongs and negligence.
     """
-    text_content = extract_structured_text(pdf_path)
+    text_content = extract_raw_text(pdf_path)
 
     if not text_content:
         return {"status": "error", "error": "No text extracted from PDF"}
 
-    text_content = trim_to_token_budget(text_content, max_chars=12000)
+    text_content = trim_to_token_budget(text_content, max_chars=30000)
+
+    base64_pdf = None
+    if provider == "gemini":
+        base64_pdf = get_base64_pdf(pdf_path)
+        if not base64_pdf:
+            return {"status": "error", "error": "PDF read failed"}
 
     try:
         if not api_key:
@@ -325,16 +338,12 @@ def analyze_darpg_routing(pdf_path, api_key="", provider="gemini"):
 
         prompt = f"""
         You are a highly skilled Government Grievance Analyst for DARPG (Department of Administrative Reforms and Public Grievances). 
-        The document below is a CPGRAMS ATR (Action Taken Report) exported as structured Markdown.
 
         You must comply with the Comprehensive Guidelines for Grievance Redressal (DARPG, 2024). Specifically:
         1. Grievances must be resolved objectively, fairly, and with a citizen-centric approach.
         2. Superficial, evasive, or repetitive replies are unacceptable.
         3. If a grievance pertains to a subordinate organization, the nodal Ministry must ensure adequate resolution rather than repeatedly returning it.
         4. Cases of ping-ponging require clear jurisdictional justification.
-
-        DOCUMENT:
-        {text_content}
 
         INSTRUCTIONS:
         1. Complainant Name: Extract the complainant's name from the document header.
@@ -368,20 +377,24 @@ def analyze_darpg_routing(pdf_path, api_key="", provider="gemini"):
         """
         
         if provider == "groq":
+            prompt_with_text = prompt + f"\n\nDOCUMENT:\n{text_content}"
             url = "https://api.groq.com/openai/v1/chat/completions"
             headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
             payload = {
                 "model": "llama-3.3-70b-versatile",
-                "messages": [{"role": "user", "content": prompt}],
+                "messages": [{"role": "user", "content": prompt_with_text}],
                 "response_format": {"type": "json_object"},
                 "temperature": 0.1
             }
         else:
-            model = "gemini-flash-latest"
+            model = "gemini-1.5-flash"
             url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}"
             headers = {"Content-Type": "application/json"}
             payload = {
-                "contents": [{"parts": [{"text": prompt}]}],
+                "contents": [{"parts": [
+                    {"text": prompt},
+                    {"inline_data": {"mime_type": "application/pdf", "data": base64_pdf}}
+                ]}],
                 "generationConfig": {"response_mime_type": "application/json"}
             }
         
