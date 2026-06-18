@@ -155,6 +155,8 @@ def save_routing_result(filename, data):
             stmt = text('''
                 UPDATE grievances SET
                     grievance_id=COALESCE(:gid, grievance_id),
+                    grievance_type=COALESCE(:gtype, grievance_type),
+                    has_attachment=COALESCE(:hatt, has_attachment),
                     complainant_name=:cn,
                     routing_action=:ra,
                     transfer_to_dept=:ttd,
@@ -171,15 +173,16 @@ def save_routing_result(filename, data):
         else:
             stmt = text('''
                 INSERT INTO grievances (
-                    filename, grievance_id, complainant_name, routing_action, transfer_to_dept,
+                    filename, grievance_id, grievance_type, has_attachment, complainant_name, routing_action, transfer_to_dept,
                     draft_atr_remarks, is_ping_pong_flag, negligence_flag,
                     desk_count, ping_pong_count, delay_root_cause, standardized_theme, urgency_score,
                     status
-                ) VALUES (:fname, :gid, :cn, :ra, :ttd, :dar, :ippf, :nf, :dc, :ppc, :drc, :st, :us, 'analyzed')
+                ) VALUES (:fname, :gid, :gtype, :hatt, :cn, :ra, :ttd, :dar, :ippf, :nf, :dc, :ppc, :drc, :st, :us, 'analyzed')
             ''')
         
         conn.execute(stmt, {
-            "fname": filename, "gid": data.get('grievance_id'), "cn": data.get('complainant_name'), 
+            "fname": filename, "gid": data.get('grievance_id'), "gtype": data.get('grievance_type'), "hatt": data.get('has_attachment'),
+            "cn": data.get('complainant_name'), 
             "ra": data.get('routing_action'), "ttd": data.get('transfer_to_dept'), "dar": data.get('draft_atr_remarks'), 
             "ippf": data.get('is_ping_pong_flag'), "nf": data.get('negligence_flag'), 
             "dc": data.get('desk_count'), "ppc": data.get('ping_pong_count'), 

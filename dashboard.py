@@ -310,7 +310,7 @@ elif app_mode == "DARPG Pendency Resolution":
         st.divider()
         
         cols_to_export = [
-            'grievance_id', 'complainant_name', 'routing_action', 'transfer_to_dept',
+            'grievance_id', 'grievance_type', 'has_attachment', 'complainant_name', 'routing_action', 'transfer_to_dept',
             'draft_atr_remarks', 'is_ping_pong_flag', 'negligence_flag',
             'desk_count', 'ping_pong_count', 'delay_root_cause', 'standardized_theme', 'urgency_score'
         ]

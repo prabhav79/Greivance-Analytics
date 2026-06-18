@@ -313,13 +313,16 @@ def analyze_darpg_routing(pdf_path, api_key="", provider="gemini"):
        - Examine the transfer/routing history in the ATR.
        - Threshold >= 3: If the grievance has bounced between Department A and Department B 3 or more times (e.g. A->B, B->A, A->B), set 'is_ping_pong_flag' to true. The drafted ATR remark must sternly flag this ping-pong for human intervention.
        - Threshold 1 or 2: If it is the 2nd or 3rd time routing to a department, 'is_ping_pong_flag' is false. However, the drafted ATR remark MUST include a polite, formal notice such as: "This is the [Nth] time this grievance is being routed to your Ministry/Department. We kindly request a specialized view of this matter to ensure accurate jurisdictional resolution."
-    4. Draft ATR Remarks: Write a professional, citizen-centric, and objective Draft ATR Reply based on the above logic. Ensure it is rooted in the specificity of the Action Taken Report.
-    5. General Metrics: Extract desk_count, ping_pong_count, delay_root_cause, standardized_theme, and urgency_score as you normally would.
+    4. Grievance Identification: Extract 'grievance_type' (classify as "Grievance", "Suggestion", or "Request") and 'has_attachment' (true if annexures mentioned).
+    5. Draft ATR Remarks: Write a professional, citizen-centric, and objective Draft ATR Reply based on the above logic. Ensure it is rooted in the specificity of the Action Taken Report.
+    6. General Metrics: Extract desk_count, ping_pong_count, delay_root_cause, standardized_theme, and urgency_score as you normally would.
 
     OUTPUT FORMAT:
     Return ONLY valid JSON.
     {{
         "grievance_id": "DOAAC/E/...",
+        "grievance_type": "Grievance",
+        "has_attachment": true,
         "complainant_name": "...",
         "routing_action": "Dispose" or "Transfer",
         "transfer_to_dept": "...",
@@ -341,7 +344,8 @@ def analyze_darpg_routing(pdf_path, api_key="", provider="gemini"):
     text_content = result.pop("raw_text_content", "")
 
     defaults = {
-        'grievance_id': None, 'complainant_name': 'Unknown', 'routing_action': 'Transfer',
+        'grievance_id': None, 'grievance_type': 'Unknown', 'has_attachment': False,
+        'complainant_name': 'Unknown', 'routing_action': 'Transfer',
         'transfer_to_dept': 'Unknown', 'draft_atr_remarks': 'No remarks generated.',
         'is_ping_pong_flag': False, 'negligence_flag': False,
         'desk_count': 0, 'ping_pong_count': 0, 'delay_root_cause': 'Unknown',
