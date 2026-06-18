@@ -124,7 +124,7 @@ def analyze_atr(pdf_path, api_key="", provider="gemini"):
             url = "https://api.groq.com/openai/v1/chat/completions"
             headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
             payload = {
-                "model": "llama3-70b-8192",
+                "model": "llama-3.3-70b-versatile",
                 "messages": [{"role": "user", "content": prompt}],
                 "response_format": {"type": "json_object"},
                 "temperature": 0.1
@@ -139,12 +139,12 @@ def analyze_atr(pdf_path, api_key="", provider="gemini"):
             }
         
         import time
-        max_retries = 3
+        max_retries = 5
         for attempt in range(max_retries):
             response = requests.post(url, json=payload, headers=headers, timeout=120)
             if response.status_code in [503, 429]:
                 if attempt < max_retries - 1:
-                    time.sleep(2 ** attempt)
+                    time.sleep(4 ** attempt)
                     continue
             break
             
@@ -248,7 +248,7 @@ def analyze_vigilance(pdf_path, api_key="", provider="gemini"):
             url = "https://api.groq.com/openai/v1/chat/completions"
             headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
             payload = {
-                "model": "llama3-70b-8192",
+                "model": "llama-3.3-70b-versatile",
                 "messages": [{"role": "user", "content": prompt}],
                 "response_format": {"type": "json_object"},
                 "temperature": 0.1
@@ -263,12 +263,12 @@ def analyze_vigilance(pdf_path, api_key="", provider="gemini"):
             }
         
         import time
-        max_retries = 3
+        max_retries = 5
         for attempt in range(max_retries):
             response = requests.post(url, json=payload, headers=headers, timeout=120)
             if response.status_code in [503, 429]:
                 if attempt < max_retries - 1:
-                    time.sleep(2 ** attempt)
+                    time.sleep(4 ** attempt)
                     continue
             break
             
@@ -369,7 +369,7 @@ def analyze_darpg_routing(pdf_path, api_key="", provider="gemini"):
             url = "https://api.groq.com/openai/v1/chat/completions"
             headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
             payload = {
-                "model": "llama3-70b-8192",
+                "model": "llama-3.3-70b-versatile",
                 "messages": [{"role": "user", "content": prompt}],
                 "response_format": {"type": "json_object"},
                 "temperature": 0.1
@@ -384,12 +384,12 @@ def analyze_darpg_routing(pdf_path, api_key="", provider="gemini"):
             }
         
         import time
-        max_retries = 3
+        max_retries = 5
         for attempt in range(max_retries):
             response = requests.post(url, json=payload, headers=headers, timeout=120)
             if response.status_code in [503, 429]:
                 if attempt < max_retries - 1:
-                    time.sleep(2 ** attempt)
+                    time.sleep(4 ** attempt)
                     continue
             break
             
