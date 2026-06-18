@@ -159,8 +159,9 @@ def analyze_atr(pdf_path, api_key="", provider="gemini"):
                 else:
                     content = data['candidates'][0]['content']['parts'][0]['text']
                     
-                if "```json" in content: content = content.replace("```json", "").replace("```", "")
-                elif "```" in content: content = content.replace("```", "")
+                json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                if json_match:
+                    content = json_match.group(0)
                 
                 result = json.loads(content)
             except (KeyError, IndexError, json.JSONDecodeError) as e:
@@ -282,8 +283,9 @@ def analyze_vigilance(pdf_path, api_key="", provider="gemini"):
                 else:
                     content = data['candidates'][0]['content']['parts'][0]['text']
                     
-                if "```json" in content: content = content.replace("```json", "").replace("```", "")
-                elif "```" in content: content = content.replace("```", "")
+                json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                if json_match:
+                    content = json_match.group(0)
                 
                 result = json.loads(content)
             except (KeyError, IndexError, json.JSONDecodeError) as e:
@@ -403,8 +405,9 @@ def analyze_darpg_routing(pdf_path, api_key="", provider="gemini"):
                 else:
                     content = data['candidates'][0]['content']['parts'][0]['text']
                     
-                if "```json" in content: content = content.replace("```json", "").replace("```", "")
-                elif "```" in content: content = content.replace("```", "")
+                json_match = re.search(r'\{.*\}', content, re.DOTALL)
+                if json_match:
+                    content = json_match.group(0)
                 
                 result = json.loads(content)
             except (KeyError, IndexError, json.JSONDecodeError) as e:
