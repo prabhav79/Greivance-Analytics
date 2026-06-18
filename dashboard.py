@@ -81,18 +81,28 @@ with st.sidebar:
                     # Run Analysis depending on mode
                     if app_mode == "General Intelligence":
                         result = analyzer.analyze_atr(filepath, api_key=api_key)
+                        if result.get("status") == "error":
+                            st.error(f"Error processing {filename}: {result.get('error')}")
+                            continue
                         database.save_result(filename, result)
                     elif app_mode == "Vigilance Angle Identification":
                         result = analyzer.analyze_vigilance(filepath, api_key=api_key)
+                        if result.get("status") == "error":
+                            st.error(f"Error processing {filename}: {result.get('error')}")
+                            continue
                         database.save_vigilance_result(filename, result)
                     else:
                         result = analyzer.analyze_darpg_routing(filepath, api_key=api_key)
+                        if result.get("status") == "error":
+                            st.error(f"Error processing {filename}: {result.get('error')}")
+                            continue
                         database.save_routing_result(filename, result)
                     
                     progress_bar.progress((i + 1) / len(uploaded_files))
             
             status_text.success("Batch Processing Complete!")
-            st.rerun()
+            # We don't rerun immediately so the user can read the error messages.
+            # They can refresh or click another button to clear.
 
 # Main Area
 if app_mode == "General Intelligence":
