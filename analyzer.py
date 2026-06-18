@@ -2,7 +2,7 @@ import requests
 import json
 import re
 import time
-from pdf_extractor import extract_raw_text, get_base64_pdf, extract_links, trim_to_token_budget
+from pdf_extractor import extract_raw_text, extract_links, trim_to_token_budget
 
 # NOTE: PDF text extraction is now handled by pdf_extractor.py
 # which uses lightweight pypdf for Groq text, and base64 encoding for Gemini native PDF ingestion.
@@ -48,17 +48,11 @@ def call_llm(prompt, pdf_path, provider, api_key):
         return {"status": "error", "error": "No text extracted from PDF"}
 
     text_content = trim_to_token_budget(text_content, max_chars=30000)
-
-    base64_pdf = None
-    if provider == "gemini":
-        base64_pdf = get_base64_pdf(pdf_path)
-        if not base64_pdf:
-            return {"status": "error", "error": "PDF read failed"}
+    prompt_with_text = prompt + f"\n\nDOCUMENT:\n{text_content}"
 
     model_name = get_best_model(api_key, provider)
 
     if provider == "groq":
-        prompt_with_text = prompt + f"\n\nDOCUMENT:\n{text_content}"
         url = "https://api.groq.com/openai/v1/chat/completions"
         headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
         payload = {
@@ -72,8 +66,7 @@ def call_llm(prompt, pdf_path, provider, api_key):
         headers = {"Content-Type": "application/json"}
         payload = {
             "contents": [{"parts": [
-                {"text": prompt},
-                {"inline_data": {"mime_type": "application/pdf", "data": base64_pdf}}
+                {"text": prompt_with_text}
             ]}],
             "generationConfig": {"response_mime_type": "application/json"}
         }

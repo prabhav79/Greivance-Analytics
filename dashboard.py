@@ -247,7 +247,7 @@ if app_mode == "General Intelligence":
 
         st.dataframe(
             df[columns_to_show],
-            use_container_width=True
+            width='stretch'
         )
 
 elif app_mode == "Vigilance Angle Identification":
@@ -343,4 +343,4 @@ elif app_mode == "DARPG Pendency Resolution":
                     mime="text/csv"
                 )
 
-        st.dataframe(export_df, use_container_width=True)
+        st.dataframe(export_df, width='stretch')

@@ -1,31 +1,32 @@
 import re
 import logging
 from pathlib import Path
-import base64
 
 logger = logging.getLogger(__name__)
 
 def extract_raw_text(pdf_path: str) -> str:
-    """Extract raw text using PyPDF (for Groq)."""
+    """
+    Extract raw text using Microsoft MarkItDown.
+    Falls back to PyPDF if MarkItDown fails.
+    """
     try:
-        from pypdf import PdfReader
-        reader = PdfReader(pdf_path)
-        text = ""
-        for page in reader.pages:
-            text += page.extract_text() or ""
-        return text
+        from markitdown import MarkItDown
+        md = MarkItDown()
+        result = md.convert(pdf_path)
+        return result.text_content
     except Exception as e:
-        logger.error(f"PyPDF failed for {pdf_path}: {e}")
-        return ""
-
-def get_base64_pdf(pdf_path: str) -> str:
-    """Read PDF bytes and return base64 string (for Gemini native)."""
-    try:
-        with open(pdf_path, "rb") as f:
-            return base64.b64encode(f.read()).decode("utf-8")
-    except Exception as e:
-        logger.error(f"Failed to read base64 for {pdf_path}: {e}")
-        return ""
+        logger.error(f"MarkItDown failed for {pdf_path}: {e}")
+        # Fallback to PyPDF
+        try:
+            from pypdf import PdfReader
+            reader = PdfReader(pdf_path)
+            text = ""
+            for page in reader.pages:
+                text += page.extract_text() or ""
+            return text
+        except Exception as e2:
+            logger.error(f"PyPDF fallback failed for {pdf_path}: {e2}")
+            return ""
 
 def extract_links(pdf_path: str) -> list[str]:
     """Extracts hyperlink URIs from a PDF using pypdf."""
@@ -40,6 +41,8 @@ def extract_links(pdf_path: str) -> list[str]:
                     if obj.get("/Subtype") == "/Link":
                         uri = obj.get("/A", {}).get("/URI")
                         if uri:
+                            if isinstance(uri, bytes):
+                                uri = uri.decode('utf-8', 'ignore')
                             links.append(uri)
     except Exception as e:
         logger.error(f"Link extraction error for {pdf_path}: {e}")
