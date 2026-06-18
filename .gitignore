@@ -1,0 +1,13 @@
+__pycache__/
+*.db
+*.sqlite3
+.env
+output/
+.venv/
+venv/
+env/
+.idea/
+.vscode/
+*.log
+
+docling_models/

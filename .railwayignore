@@ -1,0 +1,5 @@
+docling_models/
+.venv/
+output/
+*.db
+__pycache__/
